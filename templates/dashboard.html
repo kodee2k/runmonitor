@@ -1,0 +1,600 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>runmonitor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+<header class="navbar">
+  <div class="navbar-brand">
+    <svg class="logo" width="22" height="22" viewBox="0 0 200 200">
+      <circle cx="100" cy="100" r="94" fill="none" stroke="currentColor" stroke-width="4"/>
+      <circle cx="100" cy="100" r="78" fill="none" stroke="currentColor" stroke-width="2"/>
+      <text x="100" y="102" fill="currentColor" font-family="'Inter','Arial Black',sans-serif" font-weight="900" font-size="52" text-anchor="middle" dominant-baseline="central">R</text>
+    </svg>
+    <span class="brand-text">runmonitor</span>
+  </div>
+  <div class="navbar-actions">
+    <span class="gamification-badges" id="gamification-badges"></span>
+    <span class="status-dot" id="status-dot" title="live"></span>
+    <button class="btn-icon" id="btn-export" title="Export">↓</button>
+    <button class="btn-icon" id="btn-refresh" title="Refresh">⟳</button>
+    <button class="btn-icon" id="btn-theme" title="Toggle theme">◐</button>
+  </div>
+</header>
+
+<main class="main">
+
+  <!-- Selectors -->
+  <div class="selectors">
+    <div class="field">
+      <label>Project</label>
+      <select id="sel-project"></select>
+    </div>
+    <div class="field">
+      <label>Run</label>
+      <select id="sel-run"></select>
+    </div>
+    <div class="field" id="compare-field" hidden>
+      <label>Compare with</label>
+      <select id="sel-compare">
+        <option value="">— none —</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Progress -->
+  <div class="progress-wrap" id="progress-wrap" hidden>
+    <div class="progress-bar">
+      <div class="progress-fill" id="progress-fill"></div>
+    </div>
+    <span class="progress-label" id="progress-label"></span>
+  </div>
+
+  <!-- Gamification: streak + personal best -->
+  <div class="gamo-strip" id="gamo-strip" hidden>
+    <div class="gamo-item streak" id="gamo-streak" title="Consecutive steps where best metric improved">🔥 Streak: <strong>0</strong></div>
+    <div class="gamo-item best" id="gamo-best" title="Personal best">🏆 Best: <strong>—</strong></div>
+  </div>
+
+  <!-- Summary cards -->
+  <div class="summary-grid" id="summary-grid">
+    <div class="stat-card" id="card-status">
+      <span class="stat-label">Status</span>
+      <span class="stat-value" id="stat-status">—</span>
+    </div>
+    <div class="stat-card" id="card-step">
+      <span class="stat-label">Current Step</span>
+      <span class="stat-value mono" id="stat-step">—</span>
+    </div>
+    <div class="stat-card" id="card-elapsed">
+      <span class="stat-label">Elapsed</span>
+      <span class="stat-value mono" id="stat-elapsed">—</span>
+    </div>
+    <div class="stat-card" id="card-velocity">
+      <span class="stat-label">Steps / sec</span>
+      <span class="stat-value mono" id="stat-velocity">—</span>
+    </div>
+  </div>
+
+  <!-- Charts grid -->
+  <div class="charts-grid" id="charts-grid"></div>
+
+  <!-- System metrics -->
+  <section class="sys-section" id="sys-section" hidden>
+    <h2 class="section-title">System</h2>
+    <div class="sys-grid">
+      <div class="chart-card sys-chart-card">
+        <h3 class="chart-title">CPU %</h3>
+        <div class="chart-canvas-wrap"><canvas id="chart-sys-cpu"></canvas></div>
+      </div>
+      <div class="chart-card sys-chart-card">
+        <h3 class="chart-title">RAM %</h3>
+        <div class="chart-canvas-wrap"><canvas id="chart-sys-mem"></canvas></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Artifacts -->
+  <section class="config-section" id="artifacts-section" hidden>
+    <h2 class="section-title">Artifacts</h2>
+    <table class="config-table" id="artifacts-table"></table>
+  </section>
+
+  <!-- Config table -->
+  <section class="config-section" id="config-section" hidden>
+    <h2 class="section-title">Hyperparameters</h2>
+    <table class="config-table" id="config-table"></table>
+  </section>
+
+</main>
+
+<script>
+const API = {
+  async get(path) {
+    const r = await fetch(path);
+    return r.json();
+  }
+};
+
+// ── State ────────────────────────────────────────────────
+let state = {
+  project: null,
+  runId: null,
+  run: null,
+  compareId: null,
+  charts: {},
+  compareCharts: {},
+  sysCharts: {},
+  pollTimer: null,
+  theme: "dark",
+  lastPoll: Date.now(),
+  prevMaxStep: 0,
+  startTime: null,
+  streakCount: 0,
+  bestValue: null,
+  bestKey: null,
+};
+
+// ── DOM refs ────────────────────────────────────────────
+const $ = (s) => document.querySelector(s);
+const selProject = $("#sel-project");
+const selRun = $("#sel-run");
+const selCompare = $("#sel-compare");
+const compareField = $("#compare-field");
+const chartsGrid = $("#charts-grid");
+const progressWrap = $("#progress-wrap");
+const progressFill = $("#progress-fill");
+const progressLabel = $("#progress-label");
+const configSection = $("#config-section");
+const configTable = $("#config-table");
+const artifactsSection = $("#artifacts-section");
+const artifactsTable = $("#artifacts-table");
+const sysSection = $("#sys-section");
+const gamoStrip = $("#gamo-strip");
+const gamoBadges = $("#gamification-badges");
+const statusDot = $("#status-dot");
+
+// ── Theme ────────────────────────────────────────────────
+function setTheme(t) {
+  state.theme = t;
+  document.documentElement.setAttribute("data-theme", t);
+}
+$("#btn-theme").onclick = () => setTheme(state.theme === "light" ? "midnight" : "light");
+
+// ── Load projects ────────────────────────────────────────
+async function loadProjects() {
+  const projects = await API.get("/api/projects");
+  selProject.innerHTML = '<option value="">— select project —</option>';
+  projects.forEach(p => {
+    selProject.innerHTML += `<option value="${p.name}">${p.name}</option>`;
+  });
+  if (state.project && projects.find(p => p.name === state.project)) {
+    selProject.value = state.project;
+    await loadRuns(state.project);
+  }
+}
+
+// ── Load runs ────────────────────────────────────────────
+async function loadRuns(project) {
+  const runs = await API.get(`/api/runs?project=${encodeURIComponent(project)}`);
+  const statusIcon = {running: " ◉", crashed: " ✕", finished: " ✓"};
+  selRun.innerHTML = '<option value="">— select run —</option>';
+  runs.forEach(r => {
+    const label = r.name ? `${r.name} (${r.id})` : r.id;
+    selRun.innerHTML += `<option value="${r.id}">${label}${statusIcon[r.status] || ""}</option>`;
+  });
+  if (state.runId && runs.find(r => r.id === state.runId)) {
+    selRun.value = state.runId;
+  }
+  // Populate compare dropdown
+  selCompare.innerHTML = '<option value="">— none —</option>';
+  runs.forEach(r => {
+    if (r.id !== state.runId) {
+      const label = r.name ? `${r.name} (${r.id})` : r.id;
+      selCompare.innerHTML += `<option value="${r.id}">${label}${statusIcon[r.status] || ""}</option>`;
+    }
+  });
+  compareField.hidden = runs.length <= 1;
+}
+
+// ── Load single run ──────────────────────────────────────
+async function loadRun(runId) {
+  state.runId = runId;
+  state.charts = {};
+  state.compareCharts = {};
+  state.compareId = null;
+  state.prevMaxStep = 0;
+  state.startTime = Date.now();
+  state.streakCount = 0;
+  state.bestValue = null;
+  chartsGrid.innerHTML = "";
+  gamoStrip.hidden = true;
+  gamoBadges.innerHTML = "";
+  selCompare.value = "";
+
+  // Config
+  const config = await API.get(`/api/runs/${runId}/config`);
+  if (config && config.config_json) {
+    state.run = config;
+    try {
+      const cfg = JSON.parse(config.config_json);
+      if (cfg && Object.keys(cfg).length > 0) {
+        configSection.hidden = false;
+        configTable.innerHTML = Object.entries(cfg).map(([k,v]) =>
+          `<tr><td class="cfg-key">${k}</td><td class="cfg-val mono">${JSON.stringify(v)}</td></tr>`
+        ).join("");
+      } else {
+        configSection.hidden = true;
+      }
+    } catch(e) {
+      configSection.hidden = true;
+    }
+    if (config.total_steps) {
+      progressWrap.hidden = false;
+    } else {
+      progressWrap.hidden = true;
+    }
+  }
+
+  // Artifacts
+  await loadArtifacts();
+
+  // System metrics
+  await loadSystemMetrics();
+
+  await pollMetrics();
+  if (state.pollTimer) clearInterval(state.pollTimer);
+  state.pollTimer = setInterval(pollMetrics, 2000);
+}
+
+async function loadArtifacts() {
+  if (!state.runId) return;
+  const arts = await API.get(`/api/runs/${state.runId}/artifacts`);
+  if (arts.length > 0) {
+    artifactsSection.hidden = false;
+    artifactsTable.innerHTML = arts.map(a =>
+      `<tr><td class="cfg-key">${a.filename}</td>
+       <td class="cfg-val mono">${a.filepath}</td>
+       <td class="cfg-val mono">${(a.size_bytes / 1024).toFixed(1)} KB</td></tr>`
+    ).join("");
+  } else {
+    artifactsSection.hidden = true;
+  }
+}
+
+async function loadSystemMetrics() {
+  if (!state.runId) return;
+  const sys = await API.get(`/api/runs/${state.runId}/system`);
+  if (!sys.length) { sysSection.hidden = true; return; }
+  sysSection.hidden = false;
+
+  const steps = sys.map(d => d.step);
+  const cpuVals = sys.map(d => d.cpu_percent);
+  const memVals = sys.map(d => d.mem_percent);
+
+  destroySysCharts();
+  state.sysCharts = {};
+
+  const cpuCtx = document.getElementById("chart-sys-cpu").getContext("2d");
+  state.sysCharts.cpu = new Chart(cpuCtx, makeChartConfig("cpu %", steps, cpuVals, "#e63946"));
+
+  const memCtx = document.getElementById("chart-sys-mem").getContext("2d");
+  state.sysCharts.mem = new Chart(memCtx, makeChartConfig("ram %", steps, memVals, "#3370ff"));
+}
+
+function destroySysCharts() {
+  Object.values(state.sysCharts).forEach(c => c.destroy());
+  state.sysCharts = {};
+}
+
+// ── Chart config helper ───────────────────────────────────
+function getThemeCSS(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name);
+}
+
+function makeChartConfig(label, steps, values, color) {
+  return {
+    type: "line",
+    data: {
+      labels: steps,
+      datasets: [{
+        label: label,
+        data: values,
+        borderColor: color,
+        backgroundColor: color + "18",
+        borderWidth: 1.5,
+        pointRadius: 0,
+        tension: 0.2,
+        fill: true,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: {
+          title: { display: true, text: "step", color: getThemeCSS("--muted") },
+          grid: { color: getThemeCSS("--rule-2") },
+          ticks: { color: getThemeCSS("--muted"), font: { family: "JetBrains Mono", size: 11 } },
+        },
+        y: {
+          title: { display: true, text: label, color: getThemeCSS("--muted") },
+          grid: { color: getThemeCSS("--rule-2") },
+          ticks: { color: getThemeCSS("--muted"), font: { family: "JetBrains Mono", size: 11 } },
+        }
+      }
+    }
+  };
+}
+
+// ── Poll metrics ─────────────────────────────────────────
+async function pollMetrics() {
+  if (!state.runId) return;
+  statusDot.classList.add("pulse");
+  try {
+    const metrics = await API.get(`/api/runs/${state.runId}/metrics`);
+    statusDot.classList.remove("pulse");
+    if (!metrics.length) return;
+
+    const byKey = {};
+    metrics.forEach(m => {
+      if (!byKey[m.key]) byKey[m.key] = [];
+      byKey[m.key].push(m);
+    });
+
+    const allSteps = metrics.map(m => m.step);
+    const maxStep = Math.max(...allSteps);
+
+    // Summary stats
+    $("#stat-step").textContent = maxStep;
+    if (state.run && state.run.total_steps) {
+      const pct = Math.min(100, Math.round((maxStep / state.run.total_steps) * 100));
+      progressFill.style.width = pct + "%";
+      progressLabel.textContent = `${maxStep} / ${state.run.total_steps} (${pct}%)`;
+    }
+
+    // Elapsed
+    if (state.startTime) {
+      const elapsed = Math.floor((Date.now() - state.startTime) / 1000);
+      const mins = Math.floor(elapsed / 60);
+      const secs = elapsed % 60;
+      $("#stat-elapsed").textContent = `${mins}m ${secs}s`;
+    }
+
+    // Velocity
+    if (state.lastPoll > 0) {
+      const dt = (Date.now() - state.lastPoll) / 1000;
+      const ds = maxStep - state.prevMaxStep;
+      if (dt > 0) $("#stat-velocity").textContent = (ds/dt).toFixed(1);
+    }
+    state.prevMaxStep = maxStep;
+    state.lastPoll = Date.now();
+
+    // Status — color-code the card
+    if (state.run) {
+      const st = state.run.status || "running";
+      $("#stat-status").textContent = st;
+      const card = document.getElementById("card-status");
+      if (!card.id) card.id = "card-status";
+      if (st === "running") card.style.borderLeft = "3px solid var(--green)";
+      else if (st === "crashed") card.style.borderLeft = "3px solid var(--red)";
+      else card.style.borderLeft = "3px solid var(--accent)";
+    }
+
+    // Gamification
+    updateGamification(byKey);
+
+    // Render or update charts
+    renderCharts(byKey);
+
+    // Poll comparison data
+    if (state.compareId) await pollCompare();
+  } catch(e) {
+    statusDot.classList.remove("pulse");
+    console.error("poll error", e);
+  }
+}
+
+// ── Charts ───────────────────────────────────────────────
+const COLORS = ["#6B2BD9","#3370ff","#34c759","#f4a236","#e63946","#17a2b8","#6f42c1","#f5a623"];
+
+function renderCharts(byKey) {
+  const keys = Object.keys(byKey);
+  Object.keys(state.charts).forEach(k => {
+    if (!keys.includes(k)) {
+      state.charts[k].destroy();
+      delete state.charts[k];
+      const el = document.getElementById("chart-" + k);
+      if (el && el.parentElement) el.parentElement.remove();
+    }
+  });
+
+  keys.forEach((key, i) => {
+    const data = byKey[key];
+    const steps = data.map(d => d.step);
+    const values = data.map(d => d.value);
+    const color = COLORS[i % COLORS.length];
+
+    if (state.charts[key]) {
+      const chart = state.charts[key];
+      chart.data.labels = steps;
+      chart.data.datasets[0].data = values;
+      chart.update("none");
+    } else {
+      const card = document.createElement("div");
+      card.className = "chart-card";
+      card.id = "chart-card-" + key;
+      card.innerHTML = `<h3 class="chart-title">${key}</h3><div class="chart-canvas-wrap"><canvas id="chart-${key}"></canvas></div>`;
+      chartsGrid.appendChild(card);
+
+      const ctx = document.getElementById("chart-" + key).getContext("2d");
+      state.charts[key] = new Chart(ctx, makeChartConfig(key, steps, values, color));
+    }
+  });
+}
+
+// ── Gamification ─────────────────────────────────────────
+function updateGamification(byKey) {
+  const keys = Object.keys(byKey);
+  if (!keys.length) return;
+
+  const primaryKey = keys[0];
+  const vals = byKey[primaryKey].map(d => d.value);
+
+  // Streak: consecutive improving steps (assume lower is better)
+  let streak = 0;
+  for (let i = vals.length - 1; i > 0; i--) {
+    if (vals[i] < vals[i-1]) streak++;
+    else break;
+  }
+  state.streakCount = streak;
+
+  // Personal best
+  const minVal = Math.min(...vals);
+  const isNewBest = state.bestValue === null || minVal < state.bestValue;
+  state.bestValue = minVal;
+  state.bestKey = primaryKey;
+
+  if (streak > 0 || state.bestValue !== null) {
+    gamoStrip.hidden = false;
+    document.querySelector("#gamo-streak strong").textContent = streak;
+    document.querySelector("#gamo-best strong").textContent =
+      `${primaryKey}=${minVal.toFixed(4)}`;
+
+    const streakEl = document.getElementById("gamo-streak");
+    if (streak >= 5) streakEl.className = "gamo-item streak hot";
+    else if (streak >= 2) streakEl.className = "gamo-item streak warm";
+    else streakEl.className = "gamo-item streak";
+
+    let badges = "";
+    if (streak >= 3) badges += `<span class="badge badge-fire" title="${streak}-step streak">🔥${streak}</span>`;
+    if (isNewBest && vals.length > 1) badges += `<span class="badge badge-best" title="New personal best!">🏆</span>`;
+    gamoBadges.innerHTML = badges;
+  }
+
+  // Color-code step card based on recent trend
+  if (vals.length >= 2) {
+    const card = document.getElementById("card-step");
+    if (!card) return;
+    const recent = vals.slice(-3);
+    const trend = recent[recent.length - 1] - recent[0];
+    if (trend < 0) card.style.borderLeft = "3px solid var(--green)";
+    else if (trend > 0) card.style.borderLeft = "3px solid var(--amber)";
+    else card.style.borderLeft = "3px solid var(--rule)";
+  }
+}
+
+// ── Compare mode ─────────────────────────────────────────
+async function pollCompare() {
+  if (!state.compareId) return;
+  const keys = Object.keys(state.charts);
+  if (!keys.length) return;
+
+  for (const key of keys) {
+    const cmp = await API.get(
+      `/api/runs/${state.runId}/compare?other=${state.compareId}&key=${encodeURIComponent(key)}`
+    );
+    if (!cmp.run_a || !cmp.run_b) continue;
+
+    const chart = state.charts[key];
+    if (!chart) continue;
+
+    const runAData = cmp.run_a.metrics.map(d => d.value);
+    const runBData = cmp.run_b.metrics.map(d => d.value);
+    const stepsA = cmp.run_a.metrics.map(d => d.step);
+    const stepsB = cmp.run_b.metrics.map(d => d.step);
+
+    if (chart.data.datasets.length === 1) {
+      const colorB = COLORS[(Object.keys(state.charts).indexOf(key) + 1) % COLORS.length];
+      chart.data.datasets.push({
+        label: cmp.run_b.id,
+        data: runBData,
+        borderColor: colorB,
+        backgroundColor: colorB + "18",
+        borderWidth: 1.5,
+        borderDash: [4, 3],
+        pointRadius: 0,
+        tension: 0.2,
+        fill: false,
+      });
+      chart.data.datasets[0].label = state.runId;
+      chart.data.labels = stepsA;
+      chart.data.datasets[0].data = runAData;
+      chart.options.plugins.legend = { display: true, labels: { boxWidth: 12, font: { size: 10 } } };
+    } else {
+      chart.data.labels = stepsA;
+      chart.data.datasets[0].data = runAData;
+      chart.data.datasets[1].data = runBData;
+    }
+    chart.update("none");
+  }
+}
+
+// ── Export ───────────────────────────────────────────────
+
+// ── Events ───────────────────────────────────────────────
+selProject.onchange = async () => {
+  state.project = selProject.value;
+  state.runId = null;
+  state.run = null;
+  state.compareId = null;
+  chartsGrid.innerHTML = "";
+  Object.values(state.charts).forEach(c => c.destroy());
+  state.charts = {};
+  destroySysCharts();
+  configSection.hidden = true;
+  progressWrap.hidden = true;
+  artifactsSection.hidden = true;
+  sysSection.hidden = true;
+  gamoStrip.hidden = true;
+  gamoBadges.innerHTML = "";
+  compareField.hidden = true;
+  if (state.project) await loadRuns(state.project);
+};
+
+selRun.onchange = async () => {
+  if (selRun.value) await loadRun(selRun.value);
+};
+
+selCompare.onchange = async () => {
+  state.compareId = selCompare.value || null;
+  if (!state.compareId) {
+    // Remove compare datasets from all charts
+    Object.values(state.charts).forEach(c => {
+      if (c.data.datasets.length > 1) {
+        c.data.datasets.pop();
+        c.options.plugins.legend = { display: false };
+        c.update("none");
+      }
+    });
+  }
+  if (state.compareId && state.runId) await pollCompare();
+};
+
+$("#btn-refresh").onclick = () => {
+  if (state.runId) { pollMetrics(); loadArtifacts(); loadSystemMetrics(); }
+  if (state.project) loadRuns(state.project);
+  loadProjects();
+};
+
+$("#btn-export").onclick = () => {
+  if (!state.runId) return;
+  const fmt = confirm("OK = JSON, Cancel = CSV") ? "json" : "csv";
+  window.open(`/api/runs/${state.runId}/export?format=${fmt}`, "_blank");
+};
+
+// ── Boot ─────────────────────────────────────────────────
+loadProjects();
+</script>
+</body>
+</html>
