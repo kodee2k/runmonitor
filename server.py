@@ -149,4 +149,6 @@ def _start_server():
     time.sleep(0.3)  # give it a moment to bind
 
 
-_start_server()
+import os as _os
+if not _os.environ.get("RUNMONITOR_STANDALONE"):
+    _start_server()
