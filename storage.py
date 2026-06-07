@@ -89,7 +89,7 @@ def create_project(name: str) -> int:
         return project_id
 
 
-def create_run(run_id: str, project_id: int, name: str | None, config_json: str, total_steps: int | None) -> dict:
+def create_run(run_id: str, project_id: int, name: str | None, config_json: str, total_steps: int | None) -> None:
     with _lock:
         conn = get_db()
         conn.execute(

@@ -21,11 +21,14 @@ _port = 8080
 
 
 def _find_port(start=8080):
-    """Find the first available port starting from `start`."""
+    """Find the first port we can actually bind, starting from `start`."""
     for p in range(start, start + 100):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            if s.connect_ex(("127.0.0.1", p)) != 0:
+            try:
+                s.bind(("127.0.0.1", p))
                 return p
+            except OSError:
+                continue
     return start
 
 
