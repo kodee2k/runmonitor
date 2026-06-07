@@ -137,6 +137,8 @@ let state = {
   theme: "midnight",
   lastPoll: Date.now(),
   prevMaxStep: 0,
+  lastStep: 0,
+  metricsByKey: {},
   startTime: null,
   streakCount: 0,
   bestValue: null,
@@ -212,6 +214,8 @@ async function loadRun(runId) {
   state.compareCharts = {};
   state.compareId = null;
   state.prevMaxStep = 0;
+  state.lastStep = 0;
+  state.metricsByKey = {};
   state.startTime = Date.now();
   state.streakCount = 0;
   state.bestValue = null;
@@ -342,18 +346,22 @@ async function pollMetrics() {
   if (!state.runId) return;
   statusDot.classList.add("pulse");
   try {
-    const metrics = await API.get(`/api/runs/${state.runId}/metrics`);
+    const fresh = await API.get(`/api/runs/${state.runId}/metrics/live?since=${state.lastStep}`);
     statusDot.classList.remove("pulse");
-    if (!metrics.length) return;
 
-    const byKey = {};
-    metrics.forEach(m => {
-      if (!byKey[m.key]) byKey[m.key] = [];
-      byKey[m.key].push(m);
+    // Merge new rows into the accumulated store
+    fresh.forEach(m => {
+      if (!state.metricsByKey[m.key]) state.metricsByKey[m.key] = [];
+      state.metricsByKey[m.key].push(m);
+      if (m.step > state.lastStep) state.lastStep = m.step;
     });
 
-    const allSteps = metrics.map(m => m.step);
-    const maxStep = Math.max(...allSteps);
+    const byKey = state.metricsByKey;
+    const keys = Object.keys(byKey);
+    if (!keys.length) return;
+
+    let maxStep = 0;
+    keys.forEach(k => byKey[k].forEach(m => { if (m.step > maxStep) maxStep = m.step; }));
 
     // Summary stats
     $("#stat-step").textContent = maxStep;

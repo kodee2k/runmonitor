@@ -150,17 +150,22 @@ def get_runs(project_name: str | None = None) -> list[dict]:
     return [dict(r) for r in rows]
 
 
-def get_metrics(run_id: str, key: str | None = None, limit: int | None = None) -> list[dict]:
+def get_metrics(run_id: str, key: str | None = None, limit: int | None = None,
+                since: int | None = None) -> list[dict]:
     conn = get_db()
+    clauses = ["run_id=?"]
+    params: list = [run_id]
     if key:
-        query = "SELECT step, key, value, timestamp FROM metrics WHERE run_id=? AND key=? ORDER BY step"
-        params = (run_id, key)
-    else:
-        query = "SELECT step, key, value, timestamp FROM metrics WHERE run_id=? ORDER BY step, key"
-        params = (run_id,)
+        clauses.append("key=?")
+        params.append(key)
+    if since is not None:
+        clauses.append("step > ?")
+        params.append(since)
+    order = "ORDER BY step" if key else "ORDER BY step, key"
+    query = f"SELECT step, key, value, timestamp FROM metrics WHERE {' AND '.join(clauses)} {order}"
     if limit:
         query += f" LIMIT {int(limit)}"
-    rows = conn.execute(query, params).fetchall()
+    rows = conn.execute(query, tuple(params)).fetchall()
     conn.close()
     return [dict(r) for r in rows]
 

@@ -63,9 +63,7 @@ def api_run_metrics(run_id):
 def api_run_metrics_live(run_id):
     """Return only metrics with step > `since` for efficient polling."""
     since = request.args.get("since", 0, type=int)
-    all_metrics = storage.get_metrics(run_id)
-    filtered = [m for m in all_metrics if m["step"] > since]
-    return jsonify(filtered)
+    return jsonify(storage.get_metrics(run_id, since=since))
 
 
 @app.route("/api/runs/<run_id>/artifacts")
