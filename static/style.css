@@ -36,6 +36,20 @@
   --rule-w: 0.75px;
 }
 
+[data-theme="light"] {
+  --paper:   #F4F1EC;
+  --paper-2: #E8E3DA;
+  --ink:     #15121C;
+  --ink-2:   #2A2632;
+  --rule:    rgba(21, 18, 28, 0.18);
+  --rule-2:  rgba(21, 18, 28, 0.08);
+  --muted:   rgba(21, 18, 28, 0.52);
+  --accent:  #6B2BD9;
+  --accent-2: #3370ff;
+  --navy:    #1a2d4d;
+  --navy-2:  #243b63;
+}
+
 [data-theme="midnight"] {
   --paper:   #0E0B14;
   --paper-2: #161220;

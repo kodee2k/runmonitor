@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="midnight">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -134,7 +134,7 @@ let state = {
   compareCharts: {},
   sysCharts: {},
   pollTimer: null,
-  theme: "dark",
+  theme: "midnight",
   lastPoll: Date.now(),
   prevMaxStep: 0,
   startTime: null,
@@ -167,7 +167,7 @@ function setTheme(t) {
   state.theme = t;
   document.documentElement.setAttribute("data-theme", t);
 }
-$("#btn-theme").onclick = () => setTheme(state.theme === "light" ? "midnight" : "light");
+$("#btn-theme").onclick = () => setTheme(state.theme === "midnight" ? "light" : "midnight");
 
 // ── Load projects ────────────────────────────────────────
 async function loadProjects() {
