@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "runmonitor"
+version = "0.1.0"
+description = "Lean, local experiment tracker with a live web dashboard."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+dependencies = ["flask>=2.0"]
+
+[project.optional-dependencies]
+system = ["psutil>=5.0"]
+
+[project.urls]
+Homepage = "https://github.com/kodee2k/runmonitor"
+
+[tool.setuptools]
+packages = ["runmonitor"]
+
+[tool.setuptools.package-dir]
+runmonitor = "."
+
+[tool.setuptools.package-data]
+runmonitor = ["templates/*.html", "static/*.css"]
