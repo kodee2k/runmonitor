@@ -147,6 +147,8 @@ let state = {
 
 // ── DOM refs ────────────────────────────────────────────
 const $ = (s) => document.querySelector(s);
+const esc = (v) => String(v).replace(/[&<>"']/g, c =>
+  ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const selProject = $("#sel-project");
 const selRun = $("#sel-run");
 const selCompare = $("#sel-compare");
@@ -176,7 +178,7 @@ async function loadProjects() {
   const projects = await API.get("/api/projects");
   selProject.innerHTML = '<option value="">— select project —</option>';
   projects.forEach(p => {
-    selProject.innerHTML += `<option value="${p.name}">${p.name}</option>`;
+    selProject.innerHTML += `<option value="${esc(p.name)}">${esc(p.name)}</option>`;
   });
   if (state.project && projects.find(p => p.name === state.project)) {
     selProject.value = state.project;
@@ -190,8 +192,8 @@ async function loadRuns(project) {
   const statusIcon = {running: " ◉", crashed: " ✕", finished: " ✓"};
   selRun.innerHTML = '<option value="">— select run —</option>';
   runs.forEach(r => {
-    const label = r.name ? `${r.name} (${r.id})` : r.id;
-    selRun.innerHTML += `<option value="${r.id}">${label}${statusIcon[r.status] || ""}</option>`;
+    const label = r.name ? `${esc(r.name)} (${esc(r.id)})` : esc(r.id);
+    selRun.innerHTML += `<option value="${esc(r.id)}">${label}${statusIcon[r.status] || ""}</option>`;
   });
   if (state.runId && runs.find(r => r.id === state.runId)) {
     selRun.value = state.runId;
@@ -200,8 +202,8 @@ async function loadRuns(project) {
   selCompare.innerHTML = '<option value="">— none —</option>';
   runs.forEach(r => {
     if (r.id !== state.runId) {
-      const label = r.name ? `${r.name} (${r.id})` : r.id;
-      selCompare.innerHTML += `<option value="${r.id}">${label}${statusIcon[r.status] || ""}</option>`;
+      const label = r.name ? `${esc(r.name)} (${esc(r.id)})` : esc(r.id);
+      selCompare.innerHTML += `<option value="${esc(r.id)}">${label}${statusIcon[r.status] || ""}</option>`;
     }
   });
   compareField.hidden = runs.length <= 1;
@@ -233,7 +235,7 @@ async function loadRun(runId) {
       if (cfg && Object.keys(cfg).length > 0) {
         configSection.hidden = false;
         configTable.innerHTML = Object.entries(cfg).map(([k,v]) =>
-          `<tr><td class="cfg-key">${k}</td><td class="cfg-val mono">${JSON.stringify(v)}</td></tr>`
+          `<tr><td class="cfg-key">${esc(k)}</td><td class="cfg-val mono">${esc(JSON.stringify(v))}</td></tr>`
         ).join("");
       } else {
         configSection.hidden = true;
@@ -265,8 +267,8 @@ async function loadArtifacts() {
   if (arts.length > 0) {
     artifactsSection.hidden = false;
     artifactsTable.innerHTML = arts.map(a =>
-      `<tr><td class="cfg-key">${a.filename}</td>
-       <td class="cfg-val mono">${a.filepath}</td>
+      `<tr><td class="cfg-key">${esc(a.filename)}</td>
+       <td class="cfg-val mono">${esc(a.filepath)}</td>
        <td class="cfg-val mono">${(a.size_bytes / 1024).toFixed(1)} KB</td></tr>`
     ).join("");
   } else {
@@ -442,7 +444,7 @@ function renderCharts(byKey) {
       const card = document.createElement("div");
       card.className = "chart-card";
       card.id = "chart-card-" + key;
-      card.innerHTML = `<h3 class="chart-title">${key}</h3><div class="chart-canvas-wrap"><canvas id="chart-${key}"></canvas></div>`;
+      card.innerHTML = `<h3 class="chart-title">${esc(key)}</h3><div class="chart-canvas-wrap"><canvas id="chart-${key}"></canvas></div>`;
       chartsGrid.appendChild(card);
 
       const ctx = document.getElementById("chart-" + key).getContext("2d");
@@ -459,25 +461,30 @@ function updateGamification(byKey) {
   const primaryKey = keys[0];
   const vals = byKey[primaryKey].map(d => d.value);
 
-  // Streak: consecutive improving steps (assume lower is better)
+  // Infer optimization direction from the metric name.
+  // Higher-is-better for accuracy/reward/score-style metrics; lower-is-better otherwise.
+  const higherBetter = /acc|reward|score|f1|auc|precision|recall|map|bleu|iou|r2/i.test(primaryKey);
+  const improved = (a, b) => higherBetter ? a > b : a < b;
+
+  // Streak: consecutive improving steps
   let streak = 0;
   for (let i = vals.length - 1; i > 0; i--) {
-    if (vals[i] < vals[i-1]) streak++;
+    if (improved(vals[i], vals[i-1])) streak++;
     else break;
   }
   state.streakCount = streak;
 
   // Personal best
-  const minVal = Math.min(...vals);
-  const isNewBest = state.bestValue === null || minVal < state.bestValue;
-  state.bestValue = minVal;
+  const bestVal = higherBetter ? Math.max(...vals) : Math.min(...vals);
+  const isNewBest = state.bestValue === null || improved(bestVal, state.bestValue);
+  state.bestValue = bestVal;
   state.bestKey = primaryKey;
 
   if (streak > 0 || state.bestValue !== null) {
     gamoStrip.hidden = false;
     document.querySelector("#gamo-streak strong").textContent = streak;
     document.querySelector("#gamo-best strong").textContent =
-      `${primaryKey}=${minVal.toFixed(4)}`;
+      `${primaryKey}=${bestVal.toFixed(4)}`;
 
     const streakEl = document.getElementById("gamo-streak");
     if (streak >= 5) streakEl.className = "gamo-item streak hot";
@@ -495,7 +502,8 @@ function updateGamification(byKey) {
     const card = document.getElementById("card-step");
     if (!card) return;
     const recent = vals.slice(-3);
-    const trend = recent[recent.length - 1] - recent[0];
+    const delta = recent[recent.length - 1] - recent[0];
+    const trend = higherBetter ? -delta : delta;
     if (trend < 0) card.style.borderLeft = "3px solid var(--green)";
     else if (trend > 0) card.style.borderLeft = "3px solid var(--amber)";
     else card.style.borderLeft = "3px solid var(--rule)";
