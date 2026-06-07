@@ -5,6 +5,7 @@ Import and go.  Dashboard auto-starts on port 8080.
 
 import json
 import uuid
+import atexit
 import threading
 import time
 from . import server  # noqa: F401 — starts the daemon
@@ -25,6 +26,7 @@ class Run:
         self._sysmon_stop = threading.Event()
         self._sysmon_thread = None
         self._start_sysmon()
+        atexit.register(self._on_exit)
 
     @property
     def id(self) -> str:
@@ -95,6 +97,14 @@ class Run:
         self._sysmon_stop.set()
         if self._sysmon_thread:
             self._sysmon_thread.join(timeout=2)
+
+    def _on_exit(self):
+        """Mark the run as crashed if it exits without finish()/fail()."""
+        if self._finished:
+            return
+        self._stop_sysmon()
+        storage.finish_run(self._id, "crashed")
+        self._finished = True
 
 
 def init(project: str, name: str | None = None, config: dict | None = None,
