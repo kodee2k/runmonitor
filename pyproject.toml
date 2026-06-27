@@ -4,21 +4,46 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "runmonitor"
-version = "0.1.0"
-description = "Lean, local experiment tracker with a live web dashboard."
+version = "0.2.0"
+description = "Lean, local experiment tracker with a live, terminal-styled web dashboard."
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
+authors = [{ name = "bub4tz", email = "ezgroupnl@gmail.com" }]
+keywords = [
+  "machine-learning", "experiment-tracking", "metrics", "dashboard",
+  "training", "monitoring", "mlops", "tensorboard", "wandb",
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Topic :: System :: Monitoring",
+]
 dependencies = ["flask>=2.0"]
 
 [project.optional-dependencies]
 system = ["psutil>=5.0"]
 
+[project.scripts]
+runmonitor = "runmonitor.__main__:main"
+
 [project.urls]
-Homepage = "https://github.com/kodee2k/runmonitor"
+Homepage = "https://github.com/empero-org/runmonitor"
+Repository = "https://github.com/empero-org/runmonitor"
+Issues = "https://github.com/empero-org/runmonitor/issues"
 
 [tool.setuptools]
 packages = ["runmonitor"]
+include-package-data = true
 
 [tool.setuptools.package-dir]
 runmonitor = "."

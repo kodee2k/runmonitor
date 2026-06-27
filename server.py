@@ -20,8 +20,16 @@ _started = False
 _port = 8080
 
 
-def _find_port(start=8080):
-    """Find the first port we can actually bind, starting from `start`."""
+def _find_port(start=None):
+    """Find the first port we can actually bind, starting from `start`.
+
+    Defaults to ``$RUNMONITOR_PORT`` (set before launch) or 8080.
+    """
+    if start is None:
+        try:
+            start = int(os.environ.get("RUNMONITOR_PORT", 8080))
+        except ValueError:
+            start = 8080
     for p in range(start, start + 100):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             try:
@@ -140,7 +148,7 @@ def _start_server():
     if _started:
         return
     _started = True
-    _port = _find_port(8080)
+    _port = _find_port()
 
     def _run():
         app.run(host="127.0.0.1", port=_port, debug=False, use_reloader=False)

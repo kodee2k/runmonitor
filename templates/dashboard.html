@@ -44,317 +44,206 @@
     </div>
     <div class="field" id="compare-field" hidden>
       <label>Compare with</label>
-      <select id="sel-compare">
-        <option value="">— none —</option>
-      </select>
+      <select id="sel-compare"><option value="">— none —</option></select>
     </div>
   </div>
 
-  <!-- Progress -->
-  <div class="progress-wrap" id="progress-wrap" hidden>
-    <div class="progress-bar">
-      <div class="progress-fill" id="progress-fill"></div>
-    </div>
-    <span class="progress-label" id="progress-label"></span>
+  <!-- Empty state -->
+  <div class="empty" id="empty">
+    <div class="big">no run selected</div>
+    <div>pick a project &amp; run above — the curve comes alive here</div>
   </div>
 
-  <!-- Gamification: streak + personal best -->
-  <div class="gamo-strip" id="gamo-strip" hidden>
-    <div class="gamo-item streak" id="gamo-streak" title="Consecutive steps where best metric improved">🔥 Streak: <strong>0</strong></div>
-    <div class="gamo-item best" id="gamo-best" title="Personal best">🏆 Best: <strong>—</strong></div>
-  </div>
+  <!-- Run header -->
+  <section class="panel" id="runhead" hidden>
+    <span class="panel-label">run</span>
+    <div class="runhead-grid">
+      <span class="rh-name" id="rh-name">—</span>
+      <span class="rh-step">step <strong id="rh-step">0</strong></span>
+      <span class="rh-status" id="rh-status">—</span>
+      <span class="rh-spacer"></span>
+      <span class="rh-stat"><label>elapsed</label><span id="rh-elapsed">—</span></span>
+      <span class="rh-stat"><label>steps/sec</label><span id="rh-velocity">—</span></span>
+      <span class="rh-stat" id="rh-eta-wrap" hidden><label>eta</label><span id="rh-eta">—</span></span>
+    </div>
+    <div class="progress" id="rh-progress" hidden>
+      <div class="progress-bar"><div class="progress-fill" id="rh-fill"></div></div>
+      <span class="progress-label" id="rh-proglabel"></span>
+    </div>
+  </section>
 
-  <!-- Summary cards -->
-  <div class="summary-grid" id="summary-grid">
-    <div class="stat-card" id="card-status">
-      <span class="stat-label">Status</span>
-      <span class="stat-value" id="stat-status">—</span>
-    </div>
-    <div class="stat-card" id="card-step">
-      <span class="stat-label">Current Step</span>
-      <span class="stat-value mono" id="stat-step">—</span>
-    </div>
-    <div class="stat-card" id="card-elapsed">
-      <span class="stat-label">Elapsed</span>
-      <span class="stat-value mono" id="stat-elapsed">—</span>
-    </div>
-    <div class="stat-card" id="card-velocity">
-      <span class="stat-label">Steps / sec</span>
-      <span class="stat-value mono" id="stat-velocity">—</span>
-    </div>
-  </div>
+  <!-- Metric ticker = selector -->
+  <section class="panel" id="metrics-panel" hidden>
+    <span class="panel-label">metrics</span>
+    <div class="ticker" id="ticker"></div>
+  </section>
 
-  <!-- Charts grid -->
-  <div class="charts-grid" id="charts-grid"></div>
+  <!-- Hero chart -->
+  <section class="panel hero" id="hero-panel" hidden>
+    <span class="panel-label" id="hero-label">metric</span>
+    <div class="hero-wrap"><canvas id="hero-canvas"></canvas></div>
+  </section>
+
+  <!-- Anomaly status line -->
+  <div class="statusline calm" id="statusline" hidden>● all calm</div>
 
   <!-- System metrics -->
-  <section class="sys-section" id="sys-section" hidden>
-    <h2 class="section-title">System</h2>
+  <section class="panel" id="sys-panel" hidden>
+    <span class="panel-label">system</span>
     <div class="sys-grid">
-      <div class="chart-card sys-chart-card">
-        <h3 class="chart-title">CPU %</h3>
-        <div class="chart-canvas-wrap"><canvas id="chart-sys-cpu"></canvas></div>
+      <div>
+        <div class="sys-chart-title">cpu %</div>
+        <div class="sys-canvas-wrap"><canvas id="chart-sys-cpu"></canvas></div>
       </div>
-      <div class="chart-card sys-chart-card">
-        <h3 class="chart-title">RAM %</h3>
-        <div class="chart-canvas-wrap"><canvas id="chart-sys-mem"></canvas></div>
+      <div>
+        <div class="sys-chart-title">ram %</div>
+        <div class="sys-canvas-wrap"><canvas id="chart-sys-mem"></canvas></div>
       </div>
     </div>
+  </section>
+
+  <!-- Hyperparameters -->
+  <section class="panel" id="config-panel" hidden>
+    <span class="panel-label">hyperparameters</span>
+    <table class="config-table" id="config-table"></table>
   </section>
 
   <!-- Artifacts -->
-  <section class="config-section" id="artifacts-section" hidden>
-    <h2 class="section-title">Artifacts</h2>
+  <section class="panel" id="artifacts-panel" hidden>
+    <span class="panel-label">artifacts</span>
     <table class="config-table" id="artifacts-table"></table>
-  </section>
-
-  <!-- Config table -->
-  <section class="config-section" id="config-section" hidden>
-    <h2 class="section-title">Hyperparameters</h2>
-    <table class="config-table" id="config-table"></table>
   </section>
 
 </main>
 
 <script>
-const API = {
-  async get(path) {
-    const r = await fetch(path);
-    return r.json();
-  }
-};
+const API = { async get(p) { const r = await fetch(p); return r.json(); } };
 
 // ── State ────────────────────────────────────────────────
 let state = {
-  project: null,
-  runId: null,
-  run: null,
-  compareId: null,
-  charts: {},
-  compareCharts: {},
-  sysCharts: {},
-  pollTimer: null,
-  theme: "midnight",
-  lastPoll: Date.now(),
-  prevMaxStep: 0,
-  lastStep: 0,
-  metricsByKey: {},
-  startTime: null,
-  streakCount: 0,
-  bestValue: null,
-  bestKey: null,
+  project: null, runId: null, run: null, compareId: null,
+  selectedKey: null,
+  heroChart: null, sysCharts: {},
+  pollTimer: null, theme: "midnight",
+  lastPoll: Date.now(), prevMaxStep: 0, lastStep: 0,
+  metricsByKey: {}, lastValues: {}, sysData: null,
+  startTime: null, streakCount: 0, bestValue: null, bestKey: null,
 };
 
-// ── DOM refs ────────────────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────
 const $ = (s) => document.querySelector(s);
 const esc = (v) => String(v).replace(/[&<>"']/g, c =>
   ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const selProject = $("#sel-project");
-const selRun = $("#sel-run");
-const selCompare = $("#sel-compare");
-const compareField = $("#compare-field");
-const chartsGrid = $("#charts-grid");
-const progressWrap = $("#progress-wrap");
-const progressFill = $("#progress-fill");
-const progressLabel = $("#progress-label");
-const configSection = $("#config-section");
-const configTable = $("#config-table");
-const artifactsSection = $("#artifacts-section");
-const artifactsTable = $("#artifacts-table");
-const sysSection = $("#sys-section");
-const gamoStrip = $("#gamo-strip");
-const gamoBadges = $("#gamification-badges");
-const statusDot = $("#status-dot");
+const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const fmtVal = (v) => (Math.abs(v) >= 1000 || (v !== 0 && Math.abs(v) < 0.001))
+  ? v.toExponential(2) : (+v.toFixed(4)).toString();
+
+const selProject = $("#sel-project"), selRun = $("#sel-run"), selCompare = $("#sel-compare");
+const compareField = $("#compare-field"), ticker = $("#ticker");
+const statusDot = $("#status-dot"), statusLine = $("#statusline");
+const gamoBadges = $("#gamification-badges"), emptyState = $("#empty");
 
 // ── Theme ────────────────────────────────────────────────
 function setTheme(t) {
   state.theme = t;
   document.documentElement.setAttribute("data-theme", t);
+  // recolor live charts
+  if (state.selectedKey && state.metricsByKey[state.selectedKey]) createHeroChart(true);
+  if (state.sysData) renderSystemCharts(state.sysData);
 }
 $("#btn-theme").onclick = () => setTheme(state.theme === "midnight" ? "light" : "midnight");
 
-// ── Load projects ────────────────────────────────────────
+// ── Projects / runs ──────────────────────────────────────
 async function loadProjects() {
   const projects = await API.get("/api/projects");
   selProject.innerHTML = '<option value="">— select project —</option>';
-  projects.forEach(p => {
-    selProject.innerHTML += `<option value="${esc(p.name)}">${esc(p.name)}</option>`;
-  });
+  projects.forEach(p => selProject.innerHTML += `<option value="${esc(p.name)}">${esc(p.name)}</option>`);
   if (state.project && projects.find(p => p.name === state.project)) {
     selProject.value = state.project;
     await loadRuns(state.project);
   }
 }
 
-// ── Load runs ────────────────────────────────────────────
+const STATUS_ICON = { running:" ◉", crashed:" ✕", finished:" ✓" };
+const runLabel = (r) => (r.name ? `${esc(r.name)} (${esc(r.id)})` : esc(r.id)) + (STATUS_ICON[r.status] || "");
+const runName = (id) => { const r = (state.runs || []).find(r => r.id === id); return (r && r.name) ? r.name : id; };
+
 async function loadRuns(project) {
   const runs = await API.get(`/api/runs?project=${encodeURIComponent(project)}`);
-  const statusIcon = {running: " ◉", crashed: " ✕", finished: " ✓"};
-  selRun.innerHTML = '<option value="">— select run —</option>';
-  runs.forEach(r => {
-    const label = r.name ? `${esc(r.name)} (${esc(r.id)})` : esc(r.id);
-    selRun.innerHTML += `<option value="${esc(r.id)}">${label}${statusIcon[r.status] || ""}</option>`;
-  });
-  if (state.runId && runs.find(r => r.id === state.runId)) {
-    selRun.value = state.runId;
-  }
-  // Populate compare dropdown
-  selCompare.innerHTML = '<option value="">— none —</option>';
-  runs.forEach(r => {
-    if (r.id !== state.runId) {
-      const label = r.name ? `${esc(r.name)} (${esc(r.id)})` : esc(r.id);
-      selCompare.innerHTML += `<option value="${esc(r.id)}">${label}${statusIcon[r.status] || ""}</option>`;
-    }
-  });
-  compareField.hidden = runs.length <= 1;
+  state.runs = runs;
+  selRun.innerHTML = '<option value="">— select run —</option>' +
+    runs.map(r => `<option value="${esc(r.id)}">${runLabel(r)}</option>`).join("");
+  if (state.runId && runs.find(r => r.id === state.runId)) selRun.value = state.runId;
+  populateCompare(state.runId);
 }
 
-// ── Load single run ──────────────────────────────────────
-async function loadRun(runId) {
-  state.runId = runId;
-  state.charts = {};
-  state.compareCharts = {};
-  state.compareId = null;
-  state.prevMaxStep = 0;
-  state.lastStep = 0;
-  state.metricsByKey = {};
-  state.startTime = Date.now();
-  state.streakCount = 0;
-  state.bestValue = null;
-  chartsGrid.innerHTML = "";
-  gamoStrip.hidden = true;
-  gamoBadges.innerHTML = "";
-  selCompare.value = "";
+// Build the compare dropdown, always excluding the active run.
+function populateCompare(excludeId) {
+  const others = (state.runs || []).filter(r => r.id !== excludeId);
+  const cur = selCompare.value;
+  selCompare.innerHTML = '<option value="">— none —</option>' +
+    others.map(r => `<option value="${esc(r.id)}">${runLabel(r)}</option>`).join("");
+  selCompare.value = (cur && others.find(r => r.id === cur)) ? cur : "";
+  compareField.hidden = others.length === 0;
+}
 
-  // Config
+// ── Load a single run ────────────────────────────────────
+async function loadRun(runId) {
+  Object.assign(state, {
+    runId, run: null, compareId: null, selectedKey: null,
+    prevMaxStep: 0, lastStep: 0, metricsByKey: {}, lastValues: {},
+    startTime: Date.now(), streakCount: 0, bestValue: null, sysData: null,
+  });
+  if (state.heroChart) { state.heroChart.destroy(); state.heroChart = null; }
+  destroySysCharts();
+  ticker.innerHTML = ""; gamoBadges.innerHTML = "";
+  selCompare.value = "";
+  populateCompare(runId);
+  emptyState.hidden = true;
+  $("#runhead").hidden = false;
+  $("#metrics-panel").hidden = false;
+  $("#hero-panel").hidden = false;
+
   const config = await API.get(`/api/runs/${runId}/config`);
-  if (config && config.config_json) {
+  if (config && !config.error) {
     state.run = config;
-    try {
-      const cfg = JSON.parse(config.config_json);
-      if (cfg && Object.keys(cfg).length > 0) {
-        configSection.hidden = false;
-        configTable.innerHTML = Object.entries(cfg).map(([k,v]) =>
-          `<tr><td class="cfg-key">${esc(k)}</td><td class="cfg-val mono">${esc(JSON.stringify(v))}</td></tr>`
-        ).join("");
-      } else {
-        configSection.hidden = true;
-      }
-    } catch(e) {
-      configSection.hidden = true;
-    }
-    if (config.total_steps) {
-      progressWrap.hidden = false;
-    } else {
-      progressWrap.hidden = true;
-    }
+    $("#rh-name").textContent = state.runId;
+    // Hyperparameters
+    let cfg = {};
+    try { cfg = JSON.parse(config.config_json || "{}"); } catch(e) {}
+    const keys = Object.keys(cfg);
+    if (keys.length) {
+      $("#config-panel").hidden = false;
+      $("#config-table").innerHTML = keys.map(k =>
+        `<tr><td class="cfg-key">${esc(k)}</td><td class="cfg-val">${esc(JSON.stringify(cfg[k]))}</td></tr>`).join("");
+    } else { $("#config-panel").hidden = true; }
+    $("#rh-progress").hidden = !config.total_steps;
   }
 
-  // Artifacts
   await loadArtifacts();
-
-  // System metrics
   await loadSystemMetrics();
-
   await pollMetrics();
   if (state.pollTimer) clearInterval(state.pollTimer);
   state.pollTimer = setInterval(pollMetrics, 2000);
 }
 
 async function loadArtifacts() {
-  if (!state.runId) return;
   const arts = await API.get(`/api/runs/${state.runId}/artifacts`);
-  if (arts.length > 0) {
-    artifactsSection.hidden = false;
-    artifactsTable.innerHTML = arts.map(a =>
-      `<tr><td class="cfg-key">${esc(a.filename)}</td>
-       <td class="cfg-val mono">${esc(a.filepath)}</td>
-       <td class="cfg-val mono">${(a.size_bytes / 1024).toFixed(1)} KB</td></tr>`
-    ).join("");
-  } else {
-    artifactsSection.hidden = true;
-  }
-}
-
-async function loadSystemMetrics() {
-  if (!state.runId) return;
-  const sys = await API.get(`/api/runs/${state.runId}/system`);
-  if (!sys.length) { sysSection.hidden = true; return; }
-  sysSection.hidden = false;
-
-  const steps = sys.map(d => d.step);
-  const cpuVals = sys.map(d => d.cpu_percent);
-  const memVals = sys.map(d => d.mem_percent);
-
-  destroySysCharts();
-  state.sysCharts = {};
-
-  const cpuCtx = document.getElementById("chart-sys-cpu").getContext("2d");
-  state.sysCharts.cpu = new Chart(cpuCtx, makeChartConfig("cpu %", steps, cpuVals, "#e63946"));
-
-  const memCtx = document.getElementById("chart-sys-mem").getContext("2d");
-  state.sysCharts.mem = new Chart(memCtx, makeChartConfig("ram %", steps, memVals, "#3370ff"));
-}
-
-function destroySysCharts() {
-  Object.values(state.sysCharts).forEach(c => c.destroy());
-  state.sysCharts = {};
-}
-
-// ── Chart config helper ───────────────────────────────────
-function getThemeCSS(name) {
-  return getComputedStyle(document.documentElement).getPropertyValue(name);
-}
-
-function makeChartConfig(label, steps, values, color) {
-  return {
-    type: "line",
-    data: {
-      labels: steps,
-      datasets: [{
-        label: label,
-        data: values,
-        borderColor: color,
-        backgroundColor: color + "18",
-        borderWidth: 1.5,
-        pointRadius: 0,
-        tension: 0.2,
-        fill: true,
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      animation: false,
-      plugins: { legend: { display: false } },
-      scales: {
-        x: {
-          title: { display: true, text: "step", color: getThemeCSS("--muted") },
-          grid: { color: getThemeCSS("--rule-2") },
-          ticks: { color: getThemeCSS("--muted"), font: { family: "JetBrains Mono", size: 11 } },
-        },
-        y: {
-          title: { display: true, text: label, color: getThemeCSS("--muted") },
-          grid: { color: getThemeCSS("--rule-2") },
-          ticks: { color: getThemeCSS("--muted"), font: { family: "JetBrains Mono", size: 11 } },
-        }
-      }
-    }
-  };
+  if (arts.length) {
+    $("#artifacts-panel").hidden = false;
+    $("#artifacts-table").innerHTML = arts.map(a =>
+      `<tr><td class="cfg-key">${esc(a.filename)}</td><td class="cfg-val">${(a.size_bytes/1024).toFixed(1)} KB</td></tr>`).join("");
+  } else { $("#artifacts-panel").hidden = true; }
 }
 
 // ── Poll metrics ─────────────────────────────────────────
 async function pollMetrics() {
   if (!state.runId) return;
-  statusDot.classList.add("pulse");
+  statusDot.classList.remove("pulse"); void statusDot.offsetWidth; statusDot.classList.add("pulse");
   try {
     const fresh = await API.get(`/api/runs/${state.runId}/metrics/live?since=${state.lastStep}`);
-    statusDot.classList.remove("pulse");
-
-    // Merge new rows into the accumulated store
     fresh.forEach(m => {
-      if (!state.metricsByKey[m.key]) state.metricsByKey[m.key] = [];
-      state.metricsByKey[m.key].push(m);
+      (state.metricsByKey[m.key] ||= []).push(m);
       if (m.step > state.lastStep) state.lastStep = m.step;
     });
 
@@ -362,239 +251,349 @@ async function pollMetrics() {
     const keys = Object.keys(byKey);
     if (!keys.length) return;
 
+    // pick default selected metric (prefer "loss")
+    if (!state.selectedKey || !byKey[state.selectedKey]) {
+      state.selectedKey = keys.find(k => /loss/i.test(k)) || keys[0];
+    }
+
     let maxStep = 0;
     keys.forEach(k => byKey[k].forEach(m => { if (m.step > maxStep) maxStep = m.step; }));
 
-    // Summary stats
-    $("#stat-step").textContent = maxStep;
-    if (state.run && state.run.total_steps) {
-      const pct = Math.min(100, Math.round((maxStep / state.run.total_steps) * 100));
-      progressFill.style.width = pct + "%";
-      progressLabel.textContent = `${maxStep} / ${state.run.total_steps} (${pct}%)`;
-    }
-
-    // Elapsed
-    if (state.startTime) {
-      const elapsed = Math.floor((Date.now() - state.startTime) / 1000);
-      const mins = Math.floor(elapsed / 60);
-      const secs = elapsed % 60;
-      $("#stat-elapsed").textContent = `${mins}m ${secs}s`;
-    }
-
-    // Velocity
-    if (state.lastPoll > 0) {
-      const dt = (Date.now() - state.lastPoll) / 1000;
-      const ds = maxStep - state.prevMaxStep;
-      if (dt > 0) $("#stat-velocity").textContent = (ds/dt).toFixed(1);
-    }
-    state.prevMaxStep = maxStep;
-    state.lastPoll = Date.now();
-
-    // Status — color-code the card
-    if (state.run) {
-      const st = state.run.status || "running";
-      $("#stat-status").textContent = st;
-      const card = document.getElementById("card-status");
-      if (!card.id) card.id = "card-status";
-      if (st === "running") card.style.borderLeft = "3px solid var(--green)";
-      else if (st === "crashed") card.style.borderLeft = "3px solid var(--red)";
-      else card.style.borderLeft = "3px solid var(--accent)";
-    }
-
-    // Gamification
+    updateRunHeader(maxStep);
+    buildTicker(byKey);
+    renderHero(byKey);
     updateGamification(byKey);
-
-    // Render or update charts
-    renderCharts(byKey);
-
-    // Poll comparison data
     if (state.compareId) await pollCompare();
   } catch(e) {
-    statusDot.classList.remove("pulse");
     console.error("poll error", e);
   }
 }
 
-// ── Charts ───────────────────────────────────────────────
-const COLORS = ["#6B2BD9","#3370ff","#34c759","#f4a236","#e63946","#17a2b8","#6f42c1","#f5a623"];
+// ── Run header ───────────────────────────────────────────
+function updateRunHeader(maxStep) {
+  $("#rh-step").textContent = maxStep;
 
-function renderCharts(byKey) {
-  const keys = Object.keys(byKey);
-  Object.keys(state.charts).forEach(k => {
-    if (!keys.includes(k)) {
-      state.charts[k].destroy();
-      delete state.charts[k];
-      const el = document.getElementById("chart-" + k);
-      if (el && el.parentElement) el.parentElement.remove();
-    }
-  });
+  if (state.startTime) {
+    const el = Math.floor((Date.now() - state.startTime) / 1000);
+    $("#rh-elapsed").textContent = `${Math.floor(el/60)}m ${el%60}s`;
+  }
+  let vel = 0;
+  if (state.lastPoll > 0) {
+    const dt = (Date.now() - state.lastPoll) / 1000;
+    const ds = maxStep - state.prevMaxStep;
+    if (dt > 0) { vel = ds/dt; $("#rh-velocity").textContent = vel.toFixed(1); }
+  }
+  state.prevMaxStep = maxStep; state.lastPoll = Date.now();
 
-  keys.forEach((key, i) => {
-    const data = byKey[key];
-    const steps = data.map(d => d.step);
-    const values = data.map(d => d.value);
-    const color = COLORS[i % COLORS.length];
+  if (state.run && state.run.total_steps) {
+    const total = state.run.total_steps;
+    const pct = Math.min(100, Math.round((maxStep/total)*100));
+    $("#rh-fill").style.width = pct + "%";
+    $("#rh-proglabel").textContent = `${maxStep} / ${total} (${pct}%)`;
+    const etaWrap = $("#rh-eta-wrap");
+    if (vel > 0 && maxStep < total) {
+      const eta = Math.round((total - maxStep) / vel);
+      $("#rh-eta").textContent = `${Math.floor(eta/60)}m ${eta%60}s`;
+      etaWrap.hidden = false;
+    } else { etaWrap.hidden = true; }
+  }
 
-    if (state.charts[key]) {
-      const chart = state.charts[key];
-      chart.data.labels = steps;
-      chart.data.datasets[0].data = values;
-      chart.update("none");
-    } else {
-      const card = document.createElement("div");
-      card.className = "chart-card";
-      card.id = "chart-card-" + key;
-      card.innerHTML = `<h3 class="chart-title">${esc(key)}</h3><div class="chart-canvas-wrap"><canvas id="chart-${key}"></canvas></div>`;
-      chartsGrid.appendChild(card);
-
-      const ctx = document.getElementById("chart-" + key).getContext("2d");
-      state.charts[key] = new Chart(ctx, makeChartConfig(key, steps, values, color));
-    }
-  });
+  const st = (state.run && state.run.status) || "running";
+  const pill = $("#rh-status");
+  pill.textContent = st;
+  pill.className = "rh-status " + st;
 }
 
-// ── Gamification ─────────────────────────────────────────
-function updateGamification(byKey) {
+// ── Ticker (the selector) ────────────────────────────────
+function buildTicker(byKey) {
   const keys = Object.keys(byKey);
-  if (!keys.length) return;
+  const html = keys.map(k => {
+    const last = byKey[k][byKey[k].length - 1].value;
+    const changed = state.lastValues[k] !== undefined && state.lastValues[k] !== last;
+    state.lastValues[k] = last;
+    const sel = k === state.selectedKey ? " sel" : "";
+    const flash = changed ? " flash" : "";
+    return `<span class="chip${sel}${flash}" data-key="${esc(k)}"><span class="k">${esc(k)}</span>=<span class="v">${esc(fmtVal(last))}</span></span>`;
+  }).join("");
+  ticker.innerHTML = html;
+  ticker.querySelectorAll(".chip").forEach(el =>
+    el.onclick = () => selectMetric(el.dataset.key));
+}
 
-  const primaryKey = keys[0];
-  const vals = byKey[primaryKey].map(d => d.value);
+function selectMetric(key) {
+  if (key === state.selectedKey) return;
+  state.selectedKey = key;
+  ticker.querySelectorAll(".chip").forEach(el =>
+    el.classList.toggle("sel", el.dataset.key === key));
+  createHeroChart();           // recreate → curve "materializes"
+  if (state.compareId) pollCompare();
+}
 
-  // Infer optimization direction from the metric name.
-  // Higher-is-better for accuracy/reward/score-style metrics; lower-is-better otherwise.
-  const higherBetter = /acc|reward|score|f1|auc|precision|recall|map|bleu|iou|r2/i.test(primaryKey);
+// ── Hero chart ───────────────────────────────────────────
+function makeGradient(ctx, color) {
+  const g = ctx.createLinearGradient(0, 0, 0, 320);
+  g.addColorStop(0, color + "44");
+  g.addColorStop(1, color + "00");
+  return g;
+}
+
+function heroDataset(key, byKey, ctx) {
+  const data = byKey[key];
+  const color = css("--accent");
+  return {
+    label: key,
+    data: data.map(d => ({ x: d.step, y: d.value })),
+    borderColor: color,
+    backgroundColor: makeGradient(ctx, color),
+    borderWidth: 1.7,
+    tension: 0.25,
+    fill: true,
+    pointRadius: (c) => c.dataIndex === c.dataset.data.length - 1 ? 3.2 : 0,
+    pointBackgroundColor: color,
+    pointBorderColor: css("--paper"),
+    pointBorderWidth: 1.5,
+  };
+}
+
+// progressive left-to-right "draw" animation (replayed on each (re)create)
+function materializeAnimation(n) {
+  const per = n > 0 ? Math.min(900 / n, 40) : 0;
+  const prevY = (ctx) => {
+    if (ctx.index === 0) return ctx.chart.scales.y.getPixelForValue(ctx.chart.scales.y.min);
+    const meta = ctx.chart.getDatasetMeta(ctx.datasetIndex).data[ctx.index - 1];
+    return meta ? meta.getProps(['y'], true).y : 0;
+  };
+  return {
+    x: { type:"number", easing:"linear", duration: per, from: NaN,
+         delay(ctx){ if (ctx.type!=="data"||ctx.xStarted) return 0; ctx.xStarted=true; return ctx.index*per; } },
+    y: { type:"number", easing:"linear", duration: per, from: prevY,
+         delay(ctx){ if (ctx.type!=="data"||ctx.yStarted) return 0; ctx.yStarted=true; return ctx.index*per; } },
+  };
+}
+
+function heroOptions(animate, n) {
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: animate ? materializeAnimation(n) : false,
+    interaction: { intersect: false, mode: "index" },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: css("--paper-2"), titleColor: css("--ink"),
+        bodyColor: css("--ink-2"), borderColor: css("--rule"), borderWidth: 1,
+        titleFont: { family: "JetBrains Mono" }, bodyFont: { family: "JetBrains Mono" },
+      },
+    },
+    scales: {
+      x: { type: "linear",
+           title: { display: true, text: "step", color: css("--muted") },
+           grid: { color: css("--rule-2") },
+           ticks: { color: css("--muted"), font: { family: "JetBrains Mono", size: 11 }, maxRotation: 0 } },
+      y: { grid: { color: css("--rule-2") },
+           ticks: { color: css("--muted"), font: { family: "JetBrains Mono", size: 11 } } },
+    },
+  };
+}
+
+function createHeroChart(animate) {
+  const key = state.selectedKey, byKey = state.metricsByKey;
+  if (!key || !byKey[key]) return;
+  const canvas = $("#hero-canvas");
+  const ctx = canvas.getContext("2d");
+  if (state.heroChart) { state.heroChart.destroy(); state.heroChart = null; }
+  state.heroChart = new Chart(ctx, {
+    type: "line",
+    data: { datasets: [ heroDataset(key, byKey, ctx) ] },
+    options: heroOptions(animate !== false, byKey[key].length),
+  });
+  applyAnomalies();
+}
+
+function renderHero(byKey) {
+  const key = state.selectedKey;
+  if (!key || !byKey[key]) return;
+  $("#hero-label").innerHTML =
+    `${esc(key)} <span style="color:var(--muted)">(latest ${esc(fmtVal(byKey[key][byKey[key].length-1].value))})</span><span class="hero-cursor">▌</span>`;
+
+  if (!state.heroChart) { createHeroChart(true); return; }
+  // live append — no replay of the materialize animation
+  state.heroChart.data.datasets[0].data = byKey[key].map(d => ({ x: d.step, y: d.value }));
+  state.heroChart.update("none");
+  applyAnomalies();
+}
+
+// ── Anomaly detection (rolling z-score) ──────────────────
+function computeAnomalies(values, steps) {
+  const W = 20, THRESH = 6;
+  const markers = []; let latest = null;
+  for (let i = W; i < values.length; i++) {
+    const win = values.slice(i - W, i);
+    const mean = win.reduce((a,b)=>a+b,0) / win.length;
+    const variance = win.reduce((a,b)=>a+(b-mean)**2,0) / win.length;
+    const sd = Math.sqrt(variance);
+    if (sd < 1e-9) continue;
+    const z = Math.abs((values[i] - mean) / sd);
+    if (z > THRESH) { markers.push(steps[i]); latest = { step: steps[i], z }; }
+  }
+  return { markers, latest };
+}
+
+function applyAnomalies() {
+  const key = state.selectedKey, byKey = state.metricsByKey;
+  if (!state.heroChart || !key || !byKey[key]) return;
+  const series = byKey[key];
+  const { markers, latest } = computeAnomalies(series.map(d=>d.value), series.map(d=>d.step));
+  state.heroChart.$anomalies = markers;
+  state.heroChart.update("none");
+
+  statusLine.hidden = false;
+  if (latest) {
+    statusLine.className = "statusline alert";
+    statusLine.textContent = `⚠ anomaly at step ${latest.step} (z-score ${latest.z.toFixed(1)}) — this may be a transient blip`;
+  } else {
+    statusLine.className = "statusline calm";
+    statusLine.textContent = "● all calm — no anomalies detected";
+  }
+}
+
+// Chart.js plugin: vertical lines at anomaly steps
+const anomalyPlugin = {
+  id: "anomalyLines",
+  afterDatasetsDraw(chart) {
+    const lines = chart.$anomalies || [];
+    if (!lines.length || !chart.scales.x) return;
+    const { ctx, chartArea: { top, bottom }, scales: { x } } = chart;
+    ctx.save();
+    ctx.strokeStyle = css("--alert");
+    ctx.globalAlpha = 0.5;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 3]);
+    lines.forEach(step => {
+      const px = x.getPixelForValue(step);
+      if (px == null || isNaN(px)) return;
+      ctx.beginPath(); ctx.moveTo(px, top); ctx.lineTo(px, bottom); ctx.stroke();
+    });
+    ctx.restore();
+  },
+};
+Chart.register(anomalyPlugin);
+
+// ── Gamification badges ──────────────────────────────────
+function updateGamification(byKey) {
+  const key = state.selectedKey;
+  if (!key || !byKey[key]) return;
+  const vals = byKey[key].map(d => d.value);
+  if (vals.length < 2) { gamoBadges.innerHTML = ""; return; }
+
+  const higherBetter = /acc|reward|score|f1|auc|precision|recall|map|bleu|iou|r2/i.test(key);
   const improved = (a, b) => higherBetter ? a > b : a < b;
 
-  // Streak: consecutive improving steps
   let streak = 0;
   for (let i = vals.length - 1; i > 0; i--) {
-    if (improved(vals[i], vals[i-1])) streak++;
-    else break;
+    if (improved(vals[i], vals[i-1])) streak++; else break;
   }
-  state.streakCount = streak;
-
-  // Personal best
   const bestVal = higherBetter ? Math.max(...vals) : Math.min(...vals);
   const isNewBest = state.bestValue === null || improved(bestVal, state.bestValue);
-  state.bestValue = bestVal;
-  state.bestKey = primaryKey;
+  state.bestValue = bestVal; state.bestKey = key;
 
-  if (streak > 0 || state.bestValue !== null) {
-    gamoStrip.hidden = false;
-    document.querySelector("#gamo-streak strong").textContent = streak;
-    document.querySelector("#gamo-best strong").textContent =
-      `${primaryKey}=${bestVal.toFixed(4)}`;
-
-    const streakEl = document.getElementById("gamo-streak");
-    if (streak >= 5) streakEl.className = "gamo-item streak hot";
-    else if (streak >= 2) streakEl.className = "gamo-item streak warm";
-    else streakEl.className = "gamo-item streak";
-
-    let badges = "";
-    if (streak >= 3) badges += `<span class="badge badge-fire" title="${streak}-step streak">🔥${streak}</span>`;
-    if (isNewBest && vals.length > 1) badges += `<span class="badge badge-best" title="New personal best!">🏆</span>`;
-    gamoBadges.innerHTML = badges;
-  }
-
-  // Color-code step card based on recent trend
-  if (vals.length >= 2) {
-    const card = document.getElementById("card-step");
-    if (!card) return;
-    const recent = vals.slice(-3);
-    const delta = recent[recent.length - 1] - recent[0];
-    const trend = higherBetter ? -delta : delta;
-    if (trend < 0) card.style.borderLeft = "3px solid var(--green)";
-    else if (trend > 0) card.style.borderLeft = "3px solid var(--amber)";
-    else card.style.borderLeft = "3px solid var(--rule)";
-  }
+  let badges = "";
+  if (streak >= 3) badges += `<span class="badge badge-fire" title="${streak}-step improving streak">🔥${streak}</span>`;
+  badges += `<span class="badge badge-best" title="best ${esc(key)}">🏆 ${esc(fmtVal(bestVal))}</span>`;
+  gamoBadges.innerHTML = badges;
 }
 
 // ── Compare mode ─────────────────────────────────────────
 async function pollCompare() {
-  if (!state.compareId) return;
-  const keys = Object.keys(state.charts);
-  if (!keys.length) return;
-
-  for (const key of keys) {
-    const cmp = await API.get(
-      `/api/runs/${state.runId}/compare?other=${state.compareId}&key=${encodeURIComponent(key)}`
-    );
-    if (!cmp.run_a || !cmp.run_b) continue;
-
-    const chart = state.charts[key];
-    if (!chart) continue;
-
-    const runAData = cmp.run_a.metrics.map(d => d.value);
-    const runBData = cmp.run_b.metrics.map(d => d.value);
-    const stepsA = cmp.run_a.metrics.map(d => d.step);
-    const stepsB = cmp.run_b.metrics.map(d => d.step);
-
-    if (chart.data.datasets.length === 1) {
-      const colorB = COLORS[(Object.keys(state.charts).indexOf(key) + 1) % COLORS.length];
-      chart.data.datasets.push({
-        label: cmp.run_b.id,
-        data: runBData,
-        borderColor: colorB,
-        backgroundColor: colorB + "18",
-        borderWidth: 1.5,
-        borderDash: [4, 3],
-        pointRadius: 0,
-        tension: 0.2,
-        fill: false,
-      });
-      chart.data.datasets[0].label = state.runId;
-      chart.data.labels = stepsA;
-      chart.data.datasets[0].data = runAData;
-      chart.options.plugins.legend = { display: true, labels: { boxWidth: 12, font: { size: 10 } } };
-    } else {
-      chart.data.labels = stepsA;
-      chart.data.datasets[0].data = runAData;
-      chart.data.datasets[1].data = runBData;
-    }
-    chart.update("none");
+  const key = state.selectedKey;
+  if (!state.compareId || !key || !state.heroChart) return;
+  const cmp = await API.get(`/api/runs/${state.runId}/compare?other=${state.compareId}&key=${encodeURIComponent(key)}`);
+  if (!cmp.run_b) return;
+  const dataB = cmp.run_b.metrics.map(d => ({ x: d.step, y: d.value }));
+  const baseName = runName(state.compareId);
+  const labelB = dataB.length ? baseName : `${baseName} — no "${key}" logged`;
+  const chart = state.heroChart;
+  const colorB = css("--accent-2");
+  const legend = { display: true, labels: { color: css("--muted"), boxWidth: 12, font: { family:"JetBrains Mono", size: 10 } } };
+  if (chart.data.datasets.length === 1) {
+    chart.data.datasets[0].label = runName(state.runId);
+    chart.data.datasets.push({
+      label: labelB, data: dataB,
+      borderColor: colorB, backgroundColor: "transparent",
+      borderWidth: 1.6, borderDash: [5,3], pointRadius: 0, tension: 0.25, fill: false,
+    });
+    chart.options.plugins.legend = legend;
+  } else {
+    chart.data.datasets[1].data = dataB;
+    chart.data.datasets[1].label = labelB;
+    chart.data.datasets[1].borderColor = colorB;
   }
+  chart.update("none");
 }
 
-// ── Export ───────────────────────────────────────────────
+// ── System charts ────────────────────────────────────────
+async function loadSystemMetrics() {
+  const sys = await API.get(`/api/runs/${state.runId}/system`);
+  if (!sys.length) { $("#sys-panel").hidden = true; state.sysData = null; return; }
+  state.sysData = sys;
+  $("#sys-panel").hidden = false;
+  renderSystemCharts(sys);
+}
+
+function sysConfig(steps, values, color) {
+  return {
+    type: "line",
+    data: { labels: steps, datasets: [{
+      data: values, borderColor: color, backgroundColor: color + "1A",
+      borderWidth: 1.4, pointRadius: 0, tension: 0.25, fill: true,
+    }]},
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { color: css("--rule-2") }, ticks: { color: css("--muted"), font: { family:"JetBrains Mono", size: 10 }, maxRotation: 0 } },
+        y: { min: 0, max: 100, grid: { color: css("--rule-2") }, ticks: { color: css("--muted"), font: { family:"JetBrains Mono", size: 10 } } },
+      },
+    },
+  };
+}
+
+function renderSystemCharts(sys) {
+  destroySysCharts();
+  const steps = sys.map(d => d.step);
+  state.sysCharts.cpu = new Chart($("#chart-sys-cpu").getContext("2d"),
+    sysConfig(steps, sys.map(d => d.cpu_percent), css("--magenta")));
+  state.sysCharts.mem = new Chart($("#chart-sys-mem").getContext("2d"),
+    sysConfig(steps, sys.map(d => d.mem_percent), css("--accent-2")));
+}
+function destroySysCharts() {
+  Object.values(state.sysCharts).forEach(c => c.destroy());
+  state.sysCharts = {};
+}
 
 // ── Events ───────────────────────────────────────────────
 selProject.onchange = async () => {
   state.project = selProject.value;
-  state.runId = null;
-  state.run = null;
-  state.compareId = null;
-  chartsGrid.innerHTML = "";
-  Object.values(state.charts).forEach(c => c.destroy());
-  state.charts = {};
+  state.runId = null; state.run = null;
+  if (state.heroChart) { state.heroChart.destroy(); state.heroChart = null; }
   destroySysCharts();
-  configSection.hidden = true;
-  progressWrap.hidden = true;
-  artifactsSection.hidden = true;
-  sysSection.hidden = true;
-  gamoStrip.hidden = true;
-  gamoBadges.innerHTML = "";
+  ["#runhead","#metrics-panel","#hero-panel","#sys-panel","#config-panel","#artifacts-panel","#statusline"]
+    .forEach(s => $(s).hidden = true);
   compareField.hidden = true;
+  emptyState.hidden = false;
   if (state.project) await loadRuns(state.project);
 };
 
-selRun.onchange = async () => {
-  if (selRun.value) await loadRun(selRun.value);
-};
+selRun.onchange = async () => { if (selRun.value) await loadRun(selRun.value); };
 
 selCompare.onchange = async () => {
   state.compareId = selCompare.value || null;
-  if (!state.compareId) {
-    // Remove compare datasets from all charts
-    Object.values(state.charts).forEach(c => {
-      if (c.data.datasets.length > 1) {
-        c.data.datasets.pop();
-        c.options.plugins.legend = { display: false };
-        c.update("none");
-      }
-    });
+  if (!state.compareId && state.heroChart && state.heroChart.data.datasets.length > 1) {
+    state.heroChart.data.datasets.pop();
+    state.heroChart.options.plugins.legend = { display: false };
+    state.heroChart.update("none");
   }
-  if (state.compareId && state.runId) await pollCompare();
+  if (state.compareId) await pollCompare();
 };
 
 $("#btn-refresh").onclick = () => {
